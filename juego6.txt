@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Juego Educativo HTA - Personal Sanitario</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-pink-200 min-h-screen flex items-center justify-center">
+
+<!-- Ranking -->
+<div class="fixed top-4 right-4 bg-white p-4 rounded-xl shadow-xl w-64 text-sm">
+  <h3 class="font-bold mb-2">🏆 Ranking</h3>
+  <ul id="ranking"></ul>
+</div>
+
+<div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-2xl text-center">
+
+<!-- INICIO -->
+<div id="inicio">
+  <div class="text-6xl mb-4">😊</div>
+  <h1 class="text-xl font-bold mb-4">
+    Juego educativo sobre HTA en Atención Primaria
+  </h1>
+  <input id="nombre" class="border p-2 rounded w-full mb-4"
+         placeholder="Escribe tu nombre">
+  <button onclick="comenzar()"
+          class="bg-blue-300 rounded-full px-6 py-2 hover:bg-yellow-400 hover:text-white">
+    Comenzar
+  </button>
+</div>
+
+<!-- JUEGO -->
+<div id="juego" class="hidden">
+  <div id="emoji" class="text-6xl mb-1">🙂</div>
+  <div id="nivel" class="font-bold mb-1"></div>
+  <div id="puntuacion" class="mb-1">Puntos: 100</div>
+  <div id="tiempo" class="mb-2 font-semibold text-red-600">⏱ 120 s</div>
+  <p id="pregunta" class="font-semibold mb-4"></p>
+  <div id="opciones" class="space-y-2"></div>
+  <div id="feedback" class="mt-4 font-semibold"></div>
+</div>
+
+<!-- FINAL -->
+<div id="final" class="hidden">
+  <div class="text-6xl mb-4">🎉</div>
+  <p id="mensajeFinal" class="mb-4"></p>
+</div>
+
+</div>
+
+<script>
+/* ================= VARIABLES ================= */
+let jugador = "";
+let puntos = 100;
+let nivelActual = 0;
+let preguntaActual = 0;
+let inicioTiempo = 0;
+let temporizador = null;
+const TIEMPO_MAX = 120;
+
+/* ================= NIVELES ================= */
+const niveles = [
+{
+ titulo:"Nivel 0 – Búsqueda bibliográfica",
+ preguntas:[
+  {p:"Para estudiar HTA en consulta lo primero es:",o:["Revisar literatura científica","Mirar redes sociales","Usar intuición"],c:0,
+   fc:"Correcto. La evidencia científica fundamenta el análisis.",
+   fi:"La investigación debe basarse en fuentes científicas."},
+  {p:"Diseño habitual para estudios de prevalencia:",o:["Transversal","Ensayo clínico","Cohortes"],c:0,
+   fc:"Exacto. Mide frecuencia en un momento concreto.",
+   fi:"Otros diseños responden a preguntas distintas."}
+ ]
+},
+{
+ titulo:"Nivel 1 – Prevalencia en consulta",
+ preguntas:[
+  {p:"58 hipertensos de 200 pacientes indica:",o:["29%","58%","71%"],c:0,
+   fc:"Correcto. 58/200 × 100 = 29%.",
+   fi:"La prevalencia es una proporción."},
+  {p:"La prevalencia mide:",o:["Frecuencia","Causalidad","Pronóstico"],c:0,
+   fc:"Correcto. Describe la magnitud del problema.",
+   fi:"No explica causas."}
+ ]
+},
+{
+ titulo:"Nivel 2 – Estadística descriptiva",
+ preguntas:[
+  {p:"La media arterial sirve para:",o:["Describir la muestra","Diagnosticar","Comparar tratamientos"],c:0,
+   fc:"Correcto. Es una medida descriptiva.",
+   fi:"No sirve para diagnóstico individual."},
+  {p:"La desviación estándar indica:",o:["Dispersión","Media","Frecuencia"],c:0,
+   fc:"Exacto. Mide variabilidad.",
+   fi:"No es tendencia central."}
+ ]
+},
+{
+ titulo:"Nivel 3 – Inferencia poblacional",
+ preguntas:[
+  {p:"Un IC 95% indica:",o:["Rango plausible poblacional","Valor exacto","Error"],c:0,
+   fc:"Correcto. Expresa incertidumbre.",
+   fi:"Nunca da un valor exacto."},
+  {p:"p = 0,01 indica:",o:["Significación estadística","Ausencia de efecto","Error"],c:0,
+   fc:"Correcto. p < 0,05.",
+   fi:"Indica evidencia."}
+ ]
+},
+{
+ titulo:"Nivel 4 – Prevalencia poblacional",
+ preguntas:[
+  {p:"Para extrapolar datos necesito:",o:["Muestra representativa","Cualquier muestra","Solo muchos datos"],c:0,
+   fc:"Correcto. Representatividad es clave.",
+   fi:"El tamaño no compensa sesgo."},
+  {p:"IC amplio indica:",o:["Más incertidumbre","Más precisión","Error seguro"],c:0,
+   fc:"Correcto. Refleja variabilidad.",
+   fi:"No es mayor precisión."}
+ ]
+},
+{
+ titulo:"Nivel 5 – Asociación y educación sanitaria",
+ preguntas:[
+  {p:"Tabla 2x2 con p<0,05 indica:",o:["Asociación","Causalidad","Azar"],c:0,
+   fc:"Correcto. Asociación ≠ causalidad.",
+   fi:"La causalidad requiere otros diseños."},
+  {p:"Prueba para tabla 2x2:",o:["Chi-cuadrado","Prueba t","Media"],c:0,
+   fc:"Exacto. Chi-cuadrado.",
+   fi:"La t compara medias."}
+ ]
+}
+];
+
+/* ================= FUNCIONES ================= */
+function comenzar() {
+  jugador = document.getElementById("nombre").value.trim();
+  if (!jugador) return alert("Introduce tu nombre");
+
+  let progreso = JSON.parse(localStorage.getItem("progreso_"+jugador));
+  let jugadores = JSON.parse(localStorage.getItem("jugadores")) || [];
+
+  if (jugadores.includes(jugador) && !progreso) {
+    return alert("Este jugador ya ha completado el juego.");
+  }
+
+  if (progreso) {
+    ({ puntos, nivelActual, preguntaActual } = progreso);
+  }
+
+  document.getElementById("inicio").classList.add("hidden");
+  document.getElementById("juego").classList.remove("hidden");
+  cargarPregunta();
+}
+
+function cargarPregunta() {
+  const nivel = niveles[nivelActual];
+  if (!nivel) return finalizar();
+
+  const q = nivel.preguntas[preguntaActual];
+  document.getElementById("nivel").innerText = nivel.titulo;
+  document.getElementById("pregunta").innerText = q.p;
+  document.getElementById("feedback").innerText = "";
+  document.getElementById("puntuacion").innerText = "Puntos: " + puntos;
+  actualizarEmoji();
+
+  let tiempo = TIEMPO_MAX;
+  document.getElementById("tiempo").innerText = `⏱ ${tiempo} s`;
+  inicioTiempo = Date.now();
+
+  clearInterval(temporizador);
+  temporizador = setInterval(()=>{
+    tiempo--;
+    document.getElementById("tiempo").innerText = `⏱ ${tiempo} s`;
+    if (tiempo <= 0) {
+      clearInterval(temporizador);
+      responder(-1);
+    }
+  },1000);
+
+  const cont = document.getElementById("opciones");
+  cont.innerHTML = "";
+  q.o.forEach((op,i)=>{
+    const b=document.createElement("button");
+    b.innerText=op;
+    b.className="block w-full bg-blue-200 rounded-full px-4 py-2 hover:bg-green-500 hover:text-white";
+    b.onclick=()=>responder(i);
+    cont.appendChild(b);
+  });
+}
+
+function responder(i) {
+  clearInterval(temporizador);
+  const nivel = niveles[nivelActual];
+  const q = nivel.preguntas[preguntaActual];
+  const fb = document.getElementById("feedback");
+  const t = Math.floor((Date.now()-inicioTiempo)/1000);
+
+  if (i===q.c) {
+    let bonus = t<=30?20:t<=60?15:t<=90?10:5;
+    puntos+=bonus;
+    fb.innerText=`✅ ${q.fc} (+${bonus})`;
+  } else {
+    puntos-=10;
+    fb.innerText=`❌ ${q.fi} (-10)`;
+  }
+
+  localStorage.setItem("progreso_"+jugador,
+    JSON.stringify({puntos,nivelActual,preguntaActual}));
+
+  setTimeout(()=>{
+    preguntaActual++;
+    if (preguntaActual>=nivel.preguntas.length) {
+      nivelActual++; preguntaActual=0;
+    }
+    cargarPregunta();
+  },1500);
+}
+
+function actualizarEmoji(){
+  const e=document.getElementById("emoji");
+  e.innerText=puntos>=120?"🤩":puntos>=80?"🙂":"😢";
+}
+
+function finalizar(){
+  localStorage.removeItem("progreso_"+jugador);
+  let jugadores=JSON.parse(localStorage.getItem("jugadores"))||[];
+  jugadores.push(jugador);
+  localStorage.setItem("jugadores",JSON.stringify(jugadores));
+
+  document.getElementById("juego").classList.add("hidden");
+  document.getElementById("final").classList.remove("hidden");
+  document.getElementById("mensajeFinal").innerText =
+    `${jugador}, puntuación final: ${puntos}`;
+
+  let r=JSON.parse(localStorage.getItem("ranking"))||[];
+  r.unshift({nombre:jugador,puntos});
+  localStorage.setItem("ranking",JSON.stringify(r.slice(0,10)));
+  mostrarRanking();
+}
+
+function mostrarRanking(){
+  const ul=document.getElementById("ranking");
+  ul.innerHTML="";
+  (JSON.parse(localStorage.getItem("ranking"))||[])
+    .forEach(e=>ul.innerHTML+=`<li>${e.nombre}: ${e.puntos}</li>`);
+}
+
+mostrarRanking();
+</script>
+
+</body>
+</html>
